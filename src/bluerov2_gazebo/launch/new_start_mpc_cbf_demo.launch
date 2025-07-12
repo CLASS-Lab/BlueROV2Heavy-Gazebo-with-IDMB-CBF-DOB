@@ -1,0 +1,33 @@
+<launch>
+<!-- currently needed for debug -->
+    <!-- <node name="rqt_gui" pkg="rqt_gui" type="rqt_gui"/> -->
+    <arg name="horizon" default="5"/>
+    <arg name="k_alpha_1" default="960"/>
+    <arg name="k_alpha_2" default="80"/>
+
+<!-- basical interface  -->
+    <include file="$(find bluerov2_gazebo)/launch/new_start_for_cbf.launch"> 
+        <arg name="x" value="35.5"/>
+        <arg name="y" value="9"/>
+        <arg name="z" value="-94"/>
+        <arg name="record" value="true"/>
+        <arg name="use_rviz" value="true"/>
+        <arg name="horizon" value="$(arg horizon)"/>
+        <arg name="k_alpha_1" value="$(arg k_alpha_1)"/>
+        <arg name="k_alpha_2" value="$(arg k_alpha_2)"/>
+    </include>
+
+<!-- Start the MPC-CBF controller with its default parameters for the bluerov2 vehicle  -->
+    <include file="$(find new_mpc_cbf)/launch/new_mpc_cbf_go_to_target_pos.launch"> 
+        <arg name="use_log" value="false"/>
+        <arg name="horizon" value="$(arg horizon)"/>
+        <arg name="k_alpha_1" value="$(arg k_alpha_1)"/>
+        <arg name="k_alpha_2" value="$(arg k_alpha_2)"/>
+    </include>  
+
+    <!-- need to rosrun by yourself -->
+    <node name="pub_path_node" pkg="bluerov2_gazebo" type="bluerov2_pub_path.py"/>
+
+
+    <node name="rqt_gui" pkg="rqt_gui" type="rqt_gui"/>
+</launch> 

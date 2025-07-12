@@ -1,0 +1,27 @@
+<launch>
+    <arg name="uuv_name" default="bluerov2"/>
+    <arg name="amplitude_force_x" default="0"/>
+    <arg name="amplitude_force_y" default="0"/>
+    <arg name="amplitude_force_z" default="0"/>
+    <arg name="amplitude_torque_x" default="0"/>
+    <arg name="amplitude_torque_y" default="0"/>
+    <arg name="amplitude_torque_z" default="0"/>
+    <arg name="frequency" default="1.0"/>
+    <arg name="phase" default="0.0"/>
+
+    <node pkg="bluerov2_gazebo" 
+          type="apply_dynamic_wrench.py" 
+          name="apply_dynamic_wrench"
+          output="log"
+          >
+        <param name="body_name" value="$(arg uuv_name)/base_link"/>
+        <param name="reference_frame" value="world"/>
+        <!-- <param name="reference_frame" value="$(arg uuv_name)/base_link"/> -->
+        <rosparam subst_value="true">
+            amplitude_force: [$(arg amplitude_force_x), $(arg amplitude_force_y), $(arg amplitude_force_z)]
+            amplitude_torque: [$(arg amplitude_torque_x), $(arg amplitude_torque_y), $(arg amplitude_torque_z)]
+            frequency: $(arg frequency)
+            phase: $(arg phase)
+        </rosparam>
+    </node>
+</launch>

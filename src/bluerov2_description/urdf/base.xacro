@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- Loading some constants -->
+  <xacro:include filename="$(find uuv_descriptions)/urdf/common.urdf.xacro"/>
+  <!-- Loading file with sensor macros -->
+  <xacro:include filename="$(find uuv_sensor_ros_plugins)/urdf/sensor_snippets.xacro"/>
+  <!-- Loading vehicle's specific macros -->
+  <xacro:include filename="$(find bluerov2_description)/urdf/snippets.xacro"/>
+
+  <!-- ADDED  -->
+  <xacro:include filename="$(find uuv_gazebo_ros_plugins)/urdf/snippets.xacro"/>
+
+<!-- Vehicle's parameters (remember to enter the model parameters below)-->
+  <!-- Mass -->
+  <xacro:property name="mass" value="13.5"/>
+  <!-- Center of gravity and beoyancy-->
+
+
+  <!--refer to the open-source benchmark, the position is -->
+  <!-- related to the NED frames, means upper is - -->
+  <xacro:property name="cog" value="0 0 -0.067"/>
+  <!-- but the cob refers to the standard frame -->
+  <xacro:property name="cob" value="0 0 0.01"/>
+  <!-- Fluid density -->
+  <xacro:property name="rho" value="1000"/>
+
+  <!-- Volume,and bounded box -->
+  <xacro:property name="x_size" value="0.4572"/>
+  <xacro:property name="y_size" value="0.575"/>
+  <xacro:property name="z_size" value="0.254"/>
+  <xacro:property name="volume" value="0.0134"/>
+
+
+
+<!-- mesh file -->
+  <!--
+    Visual mesh file for the vehicle, usually in DAE (Collada) format. Be sure to store the
+    mesh with the origin of the mesh on the same position of the center of mass, otherwise
+    the mesh pose will have to be corrected below in the <visual> block.
+    Open the meshes for the RexROV vehicle in Blender to see an example on the mesh placement.
+  -->
+  <xacro:property name="visual_mesh_file" value="file://$(find bluerov2_description)/meshes/bluerov2_heavy.dae"/>
+
+  <!-- Collision geometry mesh, usually in STL format (it is recommended to keep
+  this geometry as simple as possible to improve the performance the physics engine
+  regarding the computation of collision forces) -->
+  <xacro:property name="collision_mesh_file" value="file://$(find bluerov2_description)/meshes/bluerov2_heavy.STL"/>
+
+  <!-- Vehicle macro -->
+  <!-- <xacro:macro name="bluerov2_base" params="namespace debug *gazebo"> -->
+  <xacro:macro name="bluerov2_base" params="namespace *gazebo">
+
+      <!-- Rigid body description of the base link -->
+      <link name="${namespace}/base_link">
+        <!--
+          Be careful to setup the coefficients for the inertial tensor,
+          otherwise your model will become unstable on Gazebo
+        -->
+        <inertial>
+          <mass value="${mass}" />
+          <origin xyz="${cog}" rpy="0 0 0"/>
+          <inertia ixx="0.26"   ixy="0.0" ixz="0.0" iyy="0.23" iyz="0.0" izz="0.37" />
+        </inertial>
+
+        <visual>
+          <origin xyz="${cog}" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="${visual_mesh_file}" scale="1 1 1" />
+          </geometry>
+        </visual>
+
+        <!-- In rexrov2_base they made collision planes to minize the GPU load -->
+        <collision>
+          <origin xyz="${cog}" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="${collision_mesh_file}" scale="1 1 1" />
+          </geometry>
+        </collision>
+
+      </link>
+
+    <gazebo reference="${namespace}/base_link">
+      <selfCollide>false</selfCollide>
+    </gazebo>
+
+    <!-- Set up hydrodynamic plugin given as input parameter -->
+    <xacro:insert_block name="gazebo"/>
+
+    <!-- Include the actuators modules: Thrusters, Beacon -->
+    <xacro:include filename="$(find bluerov2_description)/urdf/actuators.xacro" />
+
+    <!-- Include the sensor modules: 3D Pose, IMU, Pressure, Camera -->
+    <xacro:include filename="$(find bluerov2_description)/urdf/sensors.xacro"/>
+
+  </xacro:macro>
+</robot>

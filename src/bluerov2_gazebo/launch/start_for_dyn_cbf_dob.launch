@@ -1,0 +1,119 @@
+<launch>
+    <!-- this file includes dynamic obstacles setting  -->
+    <!-- Flag to start recoding a rosbag  -->
+    <arg name="record" default="false"/>
+    <!-- Initial position and heading of the vehicle (wrt Gazebo's inertial frame)  -->
+    <arg name="x" default="0"/>
+    <arg name="y" default="0"/>
+    <arg name="z" default="-20"/>
+    <arg name="yaw" default="0"/>
+
+    <arg name="use_ned_frame" default="true"/>
+    <arg name="use_rviz" default="false"/>
+
+    <arg name="horizon" default="6"/>
+    <arg name="k_alpha_1" default="960"/>
+    <arg name="k_alpha_2" default="80"/>
+
+    <!-- 使用ROS的内置时间戳 -->
+    <arg name="start_time" value="$(anon auto)"/>
+    
+    <!-- 修改bag文件名，包含时间和位置信息 -->
+    <arg name="bag_filename" default="$(find bluerov2_gazebo)/bags/record_dyn_cbf_dob_$(arg start_time)_$(arg x)_$(arg y)_$(arg z)_$(arg horizon)_$(arg k_alpha_1)_$(arg k_alpha_2).bag"/>
+
+  
+    
+    <arg name="ob_namespace" default="bluerov2_obstacles"/>
+    <!-- Initialize the Gazebo world  -->
+    <include file="$(find bluerov2_description)/launch/new_world_with_dyn_ob.launch"/>
+
+
+    <!-- Add the bluerov2 vehicle to the world  -->
+    <include file="$(find bluerov2_description)/launch/upload.launch">
+        <arg name="x" default="$(arg x)"/>
+        <arg name="y" default="$(arg y)"/>
+        <arg name="z" default="$(arg z)"/>
+        <arg name="yaw" default="$(arg yaw)"/>
+        <arg name="use_ned_frame" value="$(arg use_ned_frame)"/>
+    </include>
+
+    <!-- Initialize the recording fo the simulation according to the record flag  -->
+    <include file="$(find uuv_gazebo)/launch/controller_demos/record_demo.launch">
+      <arg name="record" value="false"/>
+      <arg name="use_ned_frame" value="$(arg use_ned_frame)"/>
+    </include>
+
+
+    <group if="$(arg use_rviz)">
+      <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-d $(find bluerov2_gazebo)/rviz/bluerov2_heavy_dyn_mpc_cbf.rviz"/>
+    </group>
+
+
+   <!-- if need to debug, you can add this into record args -->
+    <!--           /bluerov2/thrusters/0/thrust
+          /bluerov2/thrusters/1/thrust
+          /bluerov2/thrusters/2/thrust
+          /bluerov2/thrusters/3/thrust
+          /bluerov2/thrusters/4/thrust
+          /bluerov2/thrusters/5/thrust
+          /bluerov2/thrusters/6/thrust
+          /bluerov2/thrusters/7/thrust -->
+    <!-- this is now also for dob -->
+    <group if="$(arg record)">
+      <node pkg="rosbag" type="record" name="recording"
+        args="record -O $(arg bag_filename)
+          /bluerov2/pose_gt
+          /hydrodynamics/current_velocity
+          /bluerov2/control/linear
+          /bluerov2/control/angular
+          /bluerov2/std_eta
+          /bluerov2/cylinder_h
+          /bluerov2/sphere_h
+          /bluerov2/d_hat
+          /bluerov2/solve_time
+          /bluerov2_obstacles/factor
+          /gazebo/model_states"
+        if="$(arg use_ned_frame)"/>
+
+        <node pkg="rosbag" type="record" name="recording"
+        args="record -O $(arg bag_filename)
+          /bluerov2/pose_gt
+          /hydrodynamics/current_velocity
+          /bluerov2/control/linear
+          /bluerov2/control/angular
+          /bluerov2/std_eta
+          /bluerov2/cylinder_h
+          /bluerov2/sphere_h
+          /bluerov2/d_hat
+          /bluerov2/solve_time
+          /bluerov2_obstacles/factor
+          /gazebo/model_states"
+          unless="$(arg use_ned_frame)"/>
+    </group>
+
+    <!-- we need to show the cylinder and sphere in rviz -->
+    <group ns="$(arg ob_namespace)">
+        <param name="robot_description" command="$(find xacro)/xacro '$(find bluerov2_description)/urdf/all_obstacles.urdf'" />
+        <node pkg="tf" type="static_transform_publisher" name="world_to_rov_bop_tf" args="33  11  -95 0 0 0  world rov_bop 100" />
+        <node pkg="tf" type="static_transform_publisher" name="world_to_tower_tf" args="24  13  -95 0 0 0  world tower 100" />
+        <node pkg="tf" type="static_transform_publisher" name="world_to_ship_tf" args=" 30.5  14  -95 0 0 0  world ship 100" />
+        <node pkg="tf" type="static_transform_publisher" name="world_to_tower2_tf" args=" 28  10  -95 0 0 0 world tower2 100" />
+        <node pkg="tf" type="static_transform_publisher" name="world_to_tower3_tf" args=" 30.9  8  -95 0 0 0 world tower3 100" />
+        <node pkg="tf" type="static_transform_publisher" name="world_to_rov_bop2_tf" args=" 25  8  -95 0 0 1 world rov_bop2 100" />
+
+
+        <param name="fish1" command="$(find xacro)/xacro '$(find bluerov2_description)/urdf/fish1.urdf'" />
+        <param name="fish2" command="$(find xacro)/xacro '$(find bluerov2_description)/urdf/fish2.urdf'" />
+        <node pkg="dyn_ob_tf_pub" type="dyn_ob_tf_pub_node" name="dyn_ob_tf_pub_node"/>
+    </group>
+
+
+
+    <group ns="target_point">
+        <param name="robot_description" command="$(find xacro)/xacro '$(find bluerov2_description)/urdf/pt_target.urdf'" />
+        <node pkg="tf" type="static_transform_publisher" name="world_to_pt_target_tf" args="24.2 16 -93 0 0 0  world pt_target 100" />
+    </group>
+    <!-- Start thruster manager-->
+    <include file="$(find bluerov2_control)/launch/start_thruster_manager.launch">
+    </include>
+</launch>

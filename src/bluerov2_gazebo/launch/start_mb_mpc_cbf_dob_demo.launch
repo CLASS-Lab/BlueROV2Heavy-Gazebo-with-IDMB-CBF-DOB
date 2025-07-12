@@ -1,0 +1,72 @@
+<launch>
+<!-- this launch file is for the MPC-CBF-DOB demo -->
+<!-- many params are set in this file, not the file it includes! -->
+
+
+    <!-- <node name="rqt_gui" pkg="rqt_gui" type="rqt_gui"/> -->
+    <!-- 960, 80 : p2=-62  alpha>40-->
+    <!-- 60,20 : p2=-20 alpha>10 -->
+
+    <!-- <arg name="horizon" default="6"/> -->
+    <!-- important! If change horizon, need to change the blocking_index -->
+    <!-- <arg name="blocking_index" default="0,1,3"/> 
+    9 : 0,1,3,6 best; 12:0,1,3,6,9-->
+
+    <arg name="horizon" default="4"/>
+    <arg name="blocking_index" default="0,2"/>
+
+    <arg name="k_alpha_1" default="60"/>
+    <arg name="k_alpha_2" default="20"/>
+    <arg name="omega_1" default="5"/>
+    <!-- beta smaller is better -->
+    <arg name="beta" default="200"/>
+    <arg name="v1" default="20"/>
+    <arg name="alpha" default="50"/>
+    <!-- l_factor ~ 0.4 is good, don't set bigger -->
+    <arg name="l_factor" default="0.01"/>
+    
+<!-- basical interface  -->
+   <include file="$(find bluerov2_gazebo)/launch/new_start_for_cbf_dob.launch"> 
+        <arg name="x" value="35.5"/>
+        <arg name="y" value="9"/>
+        <arg name="z" value="-94"/>
+        <arg name="record" value="true"/>
+        <arg name="use_rviz" value="true"/>
+        <arg name="horizon" value="$(arg horizon)"/>
+        <arg name="k_alpha_1" value="$(arg k_alpha_1)"/>
+        <arg name="k_alpha_2" value="$(arg k_alpha_2)"/>
+    </include>
+
+<!-- Start the MPC controller with its default parameters for the bluerov2 vehicle  -->
+    <include file="$(find mb_mpc_cbf_dob)/launch/mb_mpc_cbf_dob_go_to_target_pos.launch"> 
+        <arg name="use_log" value="false"/>
+        <arg name="horizon" value="$(arg horizon)"/>
+        <arg name="blocking_index" value="$(arg blocking_index)"/>
+        <arg name="k_alpha_1" value="$(arg k_alpha_1)"/>
+        <arg name="k_alpha_2" value="$(arg k_alpha_2)"/>
+        <arg name="omega_1" value="$(arg omega_1)"/>
+        <arg name="beta" value="$(arg beta)"/>
+        <arg name="v1" value="$(arg v1)"/>
+        <arg name="alpha" value="$(arg alpha)"/>
+        <arg name="l_factor" value="$(arg l_factor)"/>
+        <arg name="apply_wrench" value="true"/>
+        <arg name="dynamic_wrench" value="true"/>
+        <arg name="force_x" value="2"/>
+        <arg name="force_y" value="-2"/>
+        <arg name="force_z" value="2"/>
+        <arg name="torque_z" value="-1"/>
+        <arg name="amplitude_force_x" value="1"/>
+        <arg name="amplitude_force_y" value="1"/>
+        <arg name="amplitude_force_z" value="1"/>
+        <arg name="amplitude_torque_z" value="1"/>
+        <arg name="frequency" value="0.1"/>
+        <arg name="phase" value="0.0"/>
+        <!-- x 偏高，y偏低，z偏高 -->
+    </include>  
+
+    <!-- need to rosrun by yourself -->
+    <node name="pub_path_node" pkg="bluerov2_gazebo" type="bluerov2_pub_path.py"/>
+    
+    <!-- if you need, just uncomment it to debug -->
+    <!-- <node name="rqt_gui" pkg="rqt_gui" type="rqt_gui"/> -->
+</launch> 

@@ -1,0 +1,82 @@
+<?xml version="1.0" ?>
+<!-- Copyright (c) 2016 The UUV Simulator Authors.
+     All rights reserved.
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<sdf version="1.5">
+  <model name="tower">
+    <pose>0 0 0.1 0 0 0</pose>
+    <link name="block">
+      <inertial>
+        <mass>1000</mass>
+        <inertia>
+          <ixx>16083.333333333</ixx>
+          <iyy>16083.333333333</iyy>
+          <izz>8166.666666667</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <collision name="block_collision">
+        <!-- <geometry>
+          <mesh>
+            <uri>model://bop_panel/meshes/VentilBlock.stl</uri>
+          </mesh>
+        </geometry> -->
+        <pose>0 0 8.5 0 -0 0</pose>
+         <geometry>
+          <cylinder>
+            <radius>1</radius>
+            <length>9</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <visual name="block_visual">
+        <geometry>
+          <mesh>
+            <uri>model://bop_panel/meshes/VentilBlock.obj</uri>
+            <scale>0.2 0.2 0.2</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <self_collide>0</self_collide>
+    </link>
+
+    <joint name="world_joint" type="fixed">
+      <child>block</child>
+      <parent>world</parent>
+      <axis>
+        <limit>
+          <lower>0</lower>
+          <upper>0</upper>
+        </limit>
+        <xyz>0 1 0</xyz>
+        <dynamics>
+          <damping>1.0</damping>
+        </dynamics>
+        <use_parent_model_frame>true</use_parent_model_frame>
+      </axis>
+      <physics>
+        <ode>
+          <cfm_damping>1</cfm_damping>
+        </ode>
+      </physics>
+    </joint>
+
+  
+  </model>
+</sdf>

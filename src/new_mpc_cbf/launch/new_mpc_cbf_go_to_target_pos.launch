@@ -1,0 +1,21 @@
+<launch>
+    <arg name="use_log" default="false"/>
+    <arg name="horizon" default="6"/>
+    <arg name="k_alpha_1" default="960"/>
+    <arg name="k_alpha_2" default="80"/>
+    <group if="$(arg use_log)">
+         <node name="new_mpc_cbf_node" pkg="new_mpc_cbf" type="new_mpc_cbf_node" output="log" >
+            <param name="horizon" value="$(arg horizon)"/>
+            <param name="k_alpha_1" value="$(arg k_alpha_1)"/>
+            <param name="k_alpha_2" value="$(arg k_alpha_2)"/>
+         </node>
+    </group>
+    
+    <group unless="$(arg use_log)">
+         <node name="new_mpc_cbf_node" pkg="new_mpc_cbf" type="new_mpc_cbf_node" output="screen" >
+            <param name="horizon" value="$(arg horizon)"/>
+            <param name="k_alpha_1" value="$(arg k_alpha_1)"/>
+            <param name="k_alpha_2" value="$(arg k_alpha_2)"/>
+         </node>
+    </group>
+</launch>       

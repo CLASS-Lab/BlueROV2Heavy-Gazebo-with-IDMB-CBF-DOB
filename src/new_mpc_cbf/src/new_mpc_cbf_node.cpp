@@ -1,0 +1,583 @@
+#include "new_mpc_cbf/new_mpc_cbf_node.h"
+
+namespace new_mpc_cbf
+{
+    NewMpcCbfNode::NewMpcCbfNode(ros::NodeHandle &nh, double tc) :  nh_("~"),
+                                                                    bluerov2_states({35.5, -9, 93.3,
+                                                                                    0.0, 0.0, 0.0,
+                                                                                    0.0, 0.0, 0.0,
+                                                                                    0.0, 0.0, 0.0}),
+                                                                   bluerov2_input({0, 0, 0, 0, 0, 0}),
+                                                                    target_state_value({20,-9,94,
+                                                                                       0.0, 0.0, 0.0,
+                                                                                       0.0, 0.0, 0.0,
+                                                                                       0.0, 0.0, 0.0})
+    {
+
+        nh_.getParam("horizon", horizon_);
+        nh_.getParam("k_alpha_1", k_alpha_1);
+        nh_.getParam("k_alpha_2", k_alpha_2);
+
+        tc_ = tc;
+        /******************************************************/
+        /*casadi modeling, create solver*/
+        // state error
+        casadi::SX Q = casadi::SX::diag(
+            casadi::SX::vertcat({400, 400, 2000,
+                                 200, 200, 80,
+                                 30, 30, 10,
+                                 30, 30, 10}));
+        // input
+        casadi::SX R = casadi::SX::diag(
+            casadi::SX::vertcat({10, 10, 1, 100, 100, 5}));
+        // terminal state error
+        casadi::SX P = casadi::SX::diag(
+            casadi::SX::vertcat({500, 500, 2000,
+                                 200, 200, 150,
+                                 200, 200, 120,
+                                 100, 100, 60}));
+        // 2*1
+        casadi::SX k_alpha =
+            casadi::SX::horzcat({k_alpha_1, k_alpha_2});
+
+        /*fix params*/
+        // System parameters
+        double m = 13.5;
+        double Ix = 0.26;
+        double Iy = 0.23;
+        double Iz = 0.37;
+        double g = 9.82;
+        double rho = 1000;
+        double volume = 0.0134;
+        double zb = 0.01;
+
+        // Linear damping coefficients
+        double Xu = 13.7;
+        double Yv = 0.0;
+        double Zw = 33.0;
+        double Kp = 0.0;
+        double Mq = 0.8;
+        double Nr = 0.0;
+
+        // Quadratic damping coefficients
+        double Xuu = 141.0;
+        double Yvv = 217.0;
+        double Zww = 190.0;
+        double Kpp = 1.19;
+        double Mqq = 0.47;
+        double Nrr = 1.5;
+
+        // Added mass coefficients (Ca coefs)
+        double Xud = 6.36;
+        double Yvd = 7.12;
+        double Zwd = 18.68;
+        double Kpd = 0.189;
+        double Mqd = 0.135;
+        double Nrd = 0.222;
+
+        double W = m * g;
+        double B = rho * g * volume;
+
+        // M = MRB + MA
+        std::vector<double> m1 = {m, m, m, Ix, Iy, Iz};
+        std::vector<double> m2 = {Xud, Yvd, Zwd, Kpd, Mqd, Nrd};
+        casadi::SX M = casadi::SX::diag(m1) + casadi::SX::diag(m2);
+
+        std::vector<double> line = {Xu, Yv, Zw, Kp, Mq, Nr};
+        casadi::SX D_linear = casadi::SX::diag(line);
+
+        /* *******************************************/
+        // cost and constraint
+        casadi::SX cost = casadi::SX::zeros(1, 1);
+        casadi::SX constraints = casadi::SX::vertcat({});
+
+        /* ******************************************* */
+        // basic define!! and modeling
+
+        casadi::Slice all;
+        // input
+        casadi::SX tau = casadi::SX::sym("tau", 6, horizon_);
+        // sys state
+        casadi::SX sym_state = casadi::SX::sym("sym_state",12, horizon_+1);
+        // Extract x as the first row of the state matrix
+        casadi::SX initial_state = casadi::SX::sym("state0",12, 1);
+
+
+        casadi::SX target_state= casadi::SX::sym("target_state", 12, 1);
+
+        sym_state(all, 0) = initial_state;
+
+        for (int i = 0; i < horizon_; i++)
+        {
+            casadi::SX sym_x,sym_y ,sym_z ,sym_psi ,sym_theta ,sym_phi ,sym_u ,sym_v ,sym_w ,sym_p ,sym_q ,sym_r, sym_nu ,eta_linear ,nu_linear;
+
+            sym_x = sym_state(0, i);
+            sym_y = sym_state(1, i);
+            sym_z = sym_state(2, i);
+
+            sym_psi = sym_state(5, i);
+            sym_theta = sym_state(4, i);
+            sym_phi = sym_state(3, i);
+
+            sym_u = sym_state(6, i);
+            sym_v = sym_state(7, i);
+            sym_w = sym_state(8, i);
+
+            sym_p = sym_state(9, i);
+            sym_q = sym_state(10, i);
+            sym_r = sym_state(11, i);
+        //   slice does not include the stop!
+            sym_nu = sym_state(casadi::Slice(6, 12), i);
+            eta_linear = sym_state(casadi::Slice(0, 3), i);
+            nu_linear = sym_state(casadi::Slice(6, 9), i);
+
+
+          
+
+            // Kinematic Jacobians (J1 and J2)
+            casadi::SX J1 = vertcat(
+                horzcat(cos(sym_psi) * cos(sym_theta),
+                        -sin(sym_psi) * cos(sym_phi) + cos(sym_psi) * sin(sym_theta) * sin(sym_phi),
+                        sin(sym_psi) * sin(sym_phi) + cos(sym_psi) * cos(sym_phi) * sin(sym_theta)),
+                horzcat(sin(sym_psi) * cos(sym_theta),
+                        cos(sym_psi) * cos(sym_phi) + sin(sym_phi) * sin(sym_theta) * sin(sym_psi),
+                        -cos(sym_psi) * sin(sym_phi) + sin(sym_theta) * sin(sym_psi) * cos(sym_phi)),
+                horzcat(-sin(sym_theta), cos(sym_theta) * sin(sym_phi), cos(sym_theta) * cos(sym_phi)));
+
+            casadi::SX J2 = vertcat(
+                horzcat(casadi::SX::ones(1, 1), sin(sym_phi) * tan(sym_theta), cos(sym_phi) * tan(sym_theta)),
+                horzcat(casadi::SX::zeros(1, 1), cos(sym_phi), -sin(sym_phi)),
+                horzcat(casadi::SX::zeros(1, 1), sin(sym_phi) / cos(sym_theta), cos(sym_phi) / cos(sym_theta)));
+
+            casadi::SX J = vertcat(horzcat(J1, casadi::SX::zeros(3, 3)), horzcat(casadi::SX::zeros(3, 3), J2));
+
+            casadi::SX C_RB = casadi::SX::zeros(6, 6);
+            C_RB(0, 4) = m * sym_w;
+            C_RB(0, 5) = -m * sym_v;
+            C_RB(1, 3) = -m * sym_w;
+            C_RB(1, 5) = m * sym_u;
+            C_RB(2, 3) = m * sym_v;
+            C_RB(2, 4) = -m * sym_u;
+            C_RB(3, 1) = m * sym_w;
+            C_RB(3, 2) = -m * sym_v;
+            C_RB(3, 4) = Iz * sym_r;
+            C_RB(3, 5) = -Iy * sym_q;
+            C_RB(4, 0) = -m * sym_w;
+            C_RB(4, 2) = m * sym_u;
+            C_RB(4, 3) = -Iz * sym_r;
+            C_RB(4, 5) = Ix * sym_p;
+            C_RB(5, 0) = m * sym_v;
+            C_RB(5, 1) = -m * sym_u;
+            C_RB(5, 3) = Iy * sym_q;
+            C_RB(5, 4) = -Ix * sym_p;
+
+            casadi::SX C_A = casadi::SX::zeros(6, 6);
+            C_A(0, 4) = Zwd * sym_w;
+            C_A(0, 5) = Yvd * sym_v;
+            C_A(1, 3) = -Zwd * sym_w;
+            C_A(1, 5) = -Xud * sym_u;
+            C_A(2, 3) = -Yvd * sym_v;
+            C_A(2, 4) = Xud * sym_u;
+            C_A(3, 1) = -Zwd * sym_w;
+            C_A(3, 2) = Yvd * sym_v;
+            C_A(3, 4) = -Nrd * sym_r;
+            C_A(3, 5) = Mqd * sym_q;
+            C_A(4, 0) = Zwd * sym_w;
+            C_A(4, 2) = -Xud * sym_u;
+            C_A(4, 3) = Nrd * sym_r;
+            C_A(4, 5) = -Kpd * sym_p;
+            C_A(5, 0) = -Yvd * sym_v;
+            C_A(5, 1) = Xud * sym_u;
+            C_A(5, 3) = -Mqd * sym_q;
+            C_A(5, 4) = Kpd * sym_p;
+
+            casadi::SX D_nonlinear = casadi::SX::zeros(6, 6);
+            D_nonlinear(0, 0) = Xuu * fabs(sym_u);
+            D_nonlinear(1, 1) = Yvv * fabs(sym_v);
+            D_nonlinear(2, 2) = Zww * fabs(sym_w);
+            D_nonlinear(3, 3) = Kpp * fabs(sym_p);
+            D_nonlinear(4, 4) = Mqq * fabs(sym_q);
+            D_nonlinear(5, 5) = Nrr * fabs(sym_r);
+
+
+
+            casadi::SX g_eta = casadi::SX::zeros(6, 1);
+            g_eta(0) = (W - B) * sin(sym_theta);
+            g_eta(1) = -(W - B) * cos(sym_theta) * sin(sym_phi);
+            g_eta(2) = -(W - B) * cos(sym_theta) * cos(sym_phi);
+            g_eta(3) = zb * B * cos(sym_theta) * sin(sym_phi);
+            g_eta(4) = zb * B * sin(sym_theta);
+
+            casadi::SX eta_dot = mtimes(J, sym_nu);
+            casadi::SX nu_dot =
+                mtimes(inv(M),
+                       tau(all, i) - mtimes((C_RB + C_A), sym_nu) - mtimes((D_linear + D_nonlinear), sym_nu) - g_eta);
+            casadi::SX state_dot = vertcat(eta_dot, nu_dot);
+            casadi::SX g_fcn = vertcat(casadi::SX::zeros(6, 6), inv(M));
+            // casadi::SX f_fcn = state_dot - mtimes(g_fcn, tau(all, i));
+            casadi::SX f_fcn = vertcat(eta_dot,  
+                                mtimes(inv(M),
+                                - mtimes((C_RB + C_A), sym_nu) - mtimes((D_linear + D_nonlinear), sym_nu) - g_eta));
+            casadi::SX Lfh;
+            casadi::SX h_fcn;
+
+            for (int j = 0; j < N_OB; j++)
+            {
+                std::vector<double> ob_c(obstacles[j], obstacles[j] + 8);
+                casadi::SX ob_current = casadi::SX(ob_c);
+                // std::cout <<"ob!!!!!!!!!!!!!!!!: "<< ob_c <<std::endl;
+                // std::cout<< "ob done!!!"<<std::endl;
+                // std::cout <<"ob slice!!!!!!!!!!!!!!!: "<< ob_current(casadi::Slice(1, 4)) <<std::endl;
+                // tested both ok!
+                casadi::SX partial_Lfh = casadi::SX::zeros(12, 1);
+                if (obstacles[j][0] == 0)
+                {
+                    casadi::SX tmp = casadi::SX::eye(3);
+                    tmp(2, 2) = 0;
+                    Lfh = dot(
+                        2 * mtimes(tmp, (eta_linear - ob_current(casadi::Slice(1, 4)))),
+                        mtimes(J1, nu_linear));
+                    h_fcn = pow((sym_x - ob_current(1)), 2) + pow((sym_y - ob_current(2)), 2) - pow(ob_current(7), 2);
+
+                    partial_Lfh(0) = 2 * sym_w * (sin(sym_phi) * sin(sym_psi) + cos(sym_phi) * cos(sym_psi) * sin(sym_theta)) - 2 * sym_v * (cos(sym_phi) * sin(sym_psi) - cos(sym_psi) * sin(sym_phi) * sin(sym_theta)) + 2 * sym_u * cos(sym_psi) * cos(sym_theta);
+                    partial_Lfh(1) = 2 * sym_v * (cos(sym_phi) * cos(sym_psi) + sin(sym_phi) * sin(sym_psi) * sin(sym_theta)) - 2 * sym_w * (cos(sym_psi) * sin(sym_phi) - cos(sym_phi) * sin(sym_psi) * sin(sym_theta)) + 2 * sym_u * cos(sym_theta) * sin(sym_psi);
+                    partial_Lfh(3) = (2 * obstacles[j][2] - 2 * sym_y) * (sym_v * (cos(sym_psi) * sin(sym_phi) - cos(sym_phi) * sin(sym_psi) * sin(sym_theta)) + sym_w * (cos(sym_phi) * cos(sym_psi) + sin(sym_phi) * sin(sym_psi) * sin(sym_theta))) - (2 * obstacles[j][1] - 2 * sym_x) * (sym_v * (sin(sym_phi) * sin(sym_psi) + cos(sym_phi) * cos(sym_psi) * sin(sym_theta)) + sym_w * (cos(sym_phi) * sin(sym_psi) - cos(sym_psi) * sin(sym_phi) * sin(sym_theta)));
+                    partial_Lfh(4) = -2 * (sym_w * cos(sym_phi) * cos(sym_theta) - sym_u * sin(sym_theta) + sym_v * cos(sym_theta) * sin(sym_phi)) * (obstacles[j][1] * cos(sym_psi) - sym_x * cos(sym_psi) + obstacles[j][2] * sin(sym_psi) - sym_y * sin(sym_psi)),
+                    partial_Lfh(5) = (2 * obstacles[j][1] - 2 * sym_x) * (sym_v * (cos(sym_phi) * cos(sym_psi) + sin(sym_phi) * sin(sym_psi) * sin(sym_theta)) - sym_w * (cos(sym_psi) * sin(sym_phi) - cos(sym_phi) * sin(sym_psi) * sin(sym_theta)) + sym_u * cos(sym_theta) * sin(sym_psi)) - (2 * obstacles[j][2] - 2 * sym_y) * (sym_w * (sin(sym_phi) * sin(sym_psi) + cos(sym_phi) * cos(sym_psi) * sin(sym_theta)) - sym_v * (cos(sym_phi) * sin(sym_psi) - cos(sym_psi) * sin(sym_phi) * sin(sym_theta)) + sym_u * cos(sym_psi) * cos(sym_theta)),
+                    partial_Lfh(6) = -cos(sym_psi) * cos(sym_theta) * (2 * obstacles[j][1] - 2 * sym_x) - cos(sym_theta) * sin(sym_psi) * (2 * obstacles[j][2] - 2 * sym_y);
+                    partial_Lfh(7) = (2 * obstacles[j][1] - 2 * sym_x) * (cos(sym_phi) * sin(sym_psi) - cos(sym_psi) * sin(sym_phi) * sin(sym_theta)) - (2 * obstacles[j][2] - 2 * sym_y) * (cos(sym_phi) * cos(sym_psi) + sin(sym_phi) * sin(sym_psi) * sin(sym_theta));
+                    partial_Lfh(8) = (2 * obstacles[j][2] - 2 * sym_y) * (cos(sym_psi) * sin(sym_phi) - cos(sym_phi) * sin(sym_psi) * sin(sym_theta)) - (2 * obstacles[j][1] - 2 * sym_x) * (sin(sym_phi) * sin(sym_psi) + cos(sym_phi) * cos(sym_psi) * sin(sym_theta));
+                }
+                else
+                {
+                    // we defaultly use sphere obstacles,not cylinder!
+                    Lfh = dot(
+                        2 * (eta_linear - ob_current(casadi::Slice(1, 4))),
+                        mtimes(J1, nu_linear));
+
+                    h_fcn = pow((sym_x - ob_current(1)), 2) + pow((sym_y - ob_current(2)), 2) + pow((sym_z - ob_current(3)), 2) - pow(ob_current(7), 2);
+                    partial_Lfh(0) = 2 * sym_w * (sin(sym_phi) * sin(sym_psi) + cos(sym_phi) * cos(sym_psi) * sin(sym_theta)) - 2 * sym_v * (cos(sym_phi) * sin(sym_psi) - cos(sym_psi) * sin(sym_phi) * sin(sym_theta)) + 2 * sym_u * cos(sym_psi) * cos(sym_theta);
+                    partial_Lfh(1) = 2 * sym_v * (cos(sym_phi) * cos(sym_psi) + sin(sym_phi) * sin(sym_psi) * sin(sym_theta)) - 2 * sym_w * (cos(sym_psi) * sin(sym_phi) - cos(sym_phi) * sin(sym_psi) * sin(sym_theta)) + 2 * sym_u * cos(sym_theta) * sin(sym_psi);
+                    partial_Lfh(3) = (2 * obstacles[j][2] - 2 * sym_y) * (sym_v * (cos(sym_psi) * sin(sym_phi) - cos(sym_phi) * sin(sym_psi) * sin(sym_theta)) + sym_w * (cos(sym_phi) * cos(sym_psi) + sin(sym_phi) * sin(sym_psi) * sin(sym_theta))) - (2 * obstacles[j][1] - 2 * sym_x) * (sym_v * (sin(sym_phi) * sin(sym_psi) + cos(sym_phi) * cos(sym_psi) * sin(sym_theta)) + sym_w * (cos(sym_phi) * sin(sym_psi) - cos(sym_psi) * sin(sym_phi) * sin(sym_theta))) - (2 * obstacles[j][3] - 2 * sym_z) * (sym_v * cos(sym_phi) * cos(sym_theta) - sym_w * cos(sym_theta) * sin(sym_phi));
+                    partial_Lfh(4) = (2 * obstacles[j][3] - 2 * sym_z) * (sym_u * cos(sym_theta) + sym_w * cos(sym_phi) * sin(sym_theta) + sym_v * sin(sym_phi) * sin(sym_theta)) - cos(sym_psi) * (2 * obstacles[j][1] - 2 * sym_x) * (sym_w * cos(sym_phi) * cos(sym_theta) - sym_u * sin(sym_theta) + sym_v * cos(sym_theta) * sin(sym_phi)) - sin(sym_psi) * (2 * obstacles[j][2] - 2 * sym_y) * (sym_w * cos(sym_phi) * cos(sym_theta) - sym_u * sin(sym_theta) + sym_v * cos(sym_theta) * sin(sym_phi));
+                    partial_Lfh(5) = (2 * obstacles[j][1] - 2 * sym_x) * (sym_v * (cos(sym_phi) * cos(sym_psi) + sin(sym_phi) * sin(sym_psi) * sin(sym_theta)) - sym_w * (cos(sym_psi) * sin(sym_phi) - cos(sym_phi) * sin(sym_psi) * sin(sym_theta)) + sym_u * cos(sym_theta) * sin(sym_psi)) - (2 * obstacles[j][2] - 2 * sym_y) * (sym_w * (sin(sym_phi) * sin(sym_psi) + cos(sym_phi) * cos(sym_psi) * sin(sym_theta)) - sym_v * (cos(sym_phi) * sin(sym_psi) - cos(sym_psi) * sin(sym_phi) * sin(sym_theta)) + sym_u * cos(sym_psi) * cos(sym_theta));
+                    partial_Lfh(6) = sin(sym_theta) * (2 * obstacles[j][3] - 2 * sym_z) - cos(sym_psi) * cos(sym_theta) * (2 * obstacles[j][1] - 2 * sym_x) - cos(sym_theta) * sin(sym_psi) * (2 * obstacles[j][2] - 2 * sym_y);
+                    partial_Lfh(7) = (2 * obstacles[j][1] - 2 * sym_x) * (cos(sym_phi) * sin(sym_psi) - cos(sym_psi) * sin(sym_phi) * sin(sym_theta)) - (2 * obstacles[j][2] - 2 * sym_y) * (cos(sym_phi) * cos(sym_psi) + sin(sym_phi) * sin(sym_psi) * sin(sym_theta)) - cos(sym_theta) * sin(sym_phi) * (2 * obstacles[j][3] - 2 * sym_z);
+                    partial_Lfh(8) = (2 * obstacles[j][2] - 2 * sym_y) * (cos(sym_psi) * sin(sym_phi) - cos(sym_phi) * sin(sym_psi) * sin(sym_theta)) - (2 * obstacles[j][1] - 2 * sym_x) * (sin(sym_phi) * sin(sym_psi) + cos(sym_phi) * cos(sym_psi) * sin(sym_theta)) - cos(sym_phi) * cos(sym_theta) * (2 * obstacles[j][3] - 2 * sym_z);
+                    // }
+                }
+                auto Lf2h = mtimes(transpose(partial_Lfh), f_fcn);
+                auto Lglfh = mtimes(transpose(partial_Lfh), g_fcn);
+
+                constraints = vertcat(
+                    constraints,
+                    Lf2h + mtimes(Lglfh, tau(all, i)) + k_alpha(0) * h_fcn + k_alpha(1) * Lfh
+                    // Lf2h+ mtimes(Lglfh, tau(all,i))+  mtimes(k_alpha, vertcat(h_fcn, Lfh))
+                );
+                // std::cout<< "constr new: " << Lf2h + mtimes(Lglfh, tau(all, i)) + k_alpha(0) * h_fcn + k_alpha(1) * Lfh << std::endl;
+            }
+
+            sym_state(all, i + 1) = sym_state(all, i) + tc_ * state_dot;
+
+            auto state_error = target_state- sym_state(all, i) ;
+            cost = cost + casadi::SX::mtimes({state_error.T(), Q, state_error}) + casadi::SX::mtimes({tau(all, i).T(), R, tau(all, i)});
+            // std::cout<< "cost new: " << casadi::SX::mtimes({state_error.T(), Q, state_error}) + casadi::SX::mtimes({tau(all, i).T(), R, tau(all, i)}) << std::endl;
+        }
+        auto state_error = target_state - sym_state(all, horizon_) ;
+        cost = cost + casadi::SX::mtimes({state_error.T(), P, state_error});
+
+        // std::cout << "important : " << casadi::SX::reshape(initial_state, -1, 1) << std::endl;
+        //  every row is a unit, with 12+12  *1
+        casadi::SX opt_params = casadi::SX::vertcat(
+            {initial_state,
+             target_state});
+        casadi::SXDict nlp =
+            {{"x", casadi::SX::reshape(tau, -1, 1)},
+             {"f", cost},
+             {"g", constraints},
+             {"p", opt_params}};
+        casadi::Dict nlp_opts;
+        nlp_opts["expand"] = true;
+        nlp_opts["ipopt.max_iter"] = 500;
+        nlp_opts["ipopt.print_level"] = 5;
+        nlp_opts["ipopt.sb"] = "yes";
+        nlp_opts["print_time"] = 0;
+        nlp_opts["ipopt.acceptable_tol"] = 1e-6;
+        // nlp_opts["ipopt.acceptable_object_change_tol"] = 1e-4;
+
+        this->mpc_cbf_solver = casadi::nlpsol("solver", "ipopt", nlp, nlp_opts);
+        std::cout << "build success!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+
+        // Initialize the lower and upper bound vectors for the entire horizon_
+        std::vector<double> lower_bounds = {-85, -85, -120, -26, -14, -22};
+        std::vector<double> upper_bounds = {85, 85, 120, 26, 14, 22};
+        // Repeat the bounds for each time step in the horizon_
+        for (int i = 0; i < horizon_; i++)
+        {
+            lbu.insert(lbu.end(), lower_bounds.begin(), lower_bounds.end());
+            ubu.insert(ubu.end(), upper_bounds.begin(), upper_bounds.end());
+        }
+        /*create solver done*/
+        /******************************************************/
+        solve_time.data = 0;
+        solve_time_pub = nh.advertise<std_msgs::Float64>("/bluerov2/solve_time", 20);
+
+
+        geometry_msgs::Vector3 zero_vec;
+        zero_vec.x = zero_vec.y = zero_vec.z = 0.0;
+        std_eta.linear = std_eta.angular = zero_vec;
+        cylinder_h = zero_vec;
+        sphere_h = zero_vec;
+
+        control_input_std.force = zero_vec;
+        control_input_std.torque = zero_vec;
+        control_std_pub = nh.advertise<geometry_msgs::Wrench>("/bluerov2/thruster_manager/input",20);
+
+        // topic
+        linear_control_pub = nh.advertise<geometry_msgs::Vector3>("/bluerov2/control/linear", 20);
+        angular_control_pub = nh.advertise<geometry_msgs::Vector3>("/bluerov2/control/angular", 20);
+        eta_pub = nh.advertise<geometry_msgs::Twist>("/bluerov2/std_eta", 20);
+        cylinder_pub = nh.advertise<geometry_msgs::Vector3>("/bluerov2/cylinder_h", 20);
+        sphere_pub = nh.advertise<geometry_msgs::Vector3>("/bluerov2/sphere_h", 20);
+
+        boost::shared_ptr<nav_msgs::Odometry const> shared_msg = ros::topic::waitForMessage<nav_msgs::Odometry>("/bluerov2/pose_gt", nh, ros::Duration(100));
+        if (shared_msg != nullptr)
+        {
+            ROS_INFO("pubisher ready, sarting subscribe");
+        }
+        else
+            exit(1);
+
+        br2_state_sub = nh.subscribe("/bluerov2/pose_gt", 10, &NewMpcCbfNode::pose_gt_cb, this);
+
+        marker.header.frame_id = "world";
+        marker.header.stamp = ros::Time::now();
+        marker.ns = "basic_shapes";
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.orientation.w = 1.;
+        marker.id = 0;
+        marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+        marker.scale.z = 0.2;
+        marker.color.r = 1;
+        marker.color.g = 1;
+        marker.color.b = 1;
+        marker.color.a = 1;
+        freq_marker_pub = nh.advertise<visualization_msgs::Marker>("TEXT_VIEW_FACING", 20);
+    }
+
+    void NewMpcCbfNode::pose_gt_cb(const nav_msgs::Odometry &msg)
+    {
+        // update std_eta
+        std_eta.linear.x = msg.pose.pose.position.x;
+        std_eta.linear.y = msg.pose.pose.position.y;
+        std_eta.linear.z = msg.pose.pose.position.z;
+
+        tf2::Quaternion tf_quat;
+        tf2::convert(msg.pose.pose.orientation, tf_quat);
+        tf2::Matrix3x3 quat_m(tf_quat);
+        quat_m.getRPY(std_eta.angular.x, std_eta.angular.y, std_eta.angular.z);
+
+        bluerov2_states[EnumStates::x] = msg.pose.pose.position.x;
+        bluerov2_states[EnumStates::y] = -msg.pose.pose.position.y;
+        bluerov2_states[EnumStates::z] = -msg.pose.pose.position.z;
+        bluerov2_states[EnumStates::phi] = std_eta.angular.x;
+        bluerov2_states[EnumStates::theta] = -std_eta.angular.y;
+        bluerov2_states[EnumStates::psi] = -std_eta.angular.z;
+        bluerov2_states[EnumStates::u] = msg.twist.twist.linear.x;
+        bluerov2_states[EnumStates::v] = -msg.twist.twist.linear.y;
+        bluerov2_states[EnumStates::w] = -msg.twist.twist.linear.z;
+        bluerov2_states[EnumStates::p] = msg.twist.twist.angular.x;
+        bluerov2_states[EnumStates::q] = -msg.twist.twist.angular.y;
+        bluerov2_states[EnumStates::r] = -msg.twist.twist.angular.z;
+
+        // the state is in ned frame
+        // std::cout<< "state: "  << bluerov2_states << std::endl;
+    }
+
+    void NewMpcCbfNode::control_pub(void)
+    {
+        eta_pub.publish(std_eta);
+        // https://stackoverflow.com/questions/43907601/how-to-copy-data-from-c-array-to-eigen-matrix-or-vector
+        Eigen::VectorXd control_input = Eigen::Map<Eigen::VectorXd>(bluerov2_input.data(), bluerov2_input.size());        
+        
+        // make this  into std frame
+        control_input[1] *= -1;
+        control_input[2] *= -1;
+        control_input[4] *= -1;
+        control_input[5] *= -1;
+        linear_control.x = control_input[0];
+        linear_control.y = control_input[1];
+        linear_control.z = control_input[2];
+        angular_control.x = control_input[3];
+        angular_control.y = control_input[4];
+        angular_control.z = control_input[5];
+        linear_control_pub.publish(linear_control);
+        angular_control_pub.publish(angular_control);
+        std::cout << "-------------------------control input in std frame-----------------------------------------------------------------------" << std::endl;
+        std::cout << "u0:     " << control_input[0] << "\tu1:     " << control_input[1] << "\tu2:     " << control_input[2] << std::endl;
+        std::cout << "u3:        " << control_input[3] << "\tu4:       " << control_input[4] << "\tu5:     " << control_input[5] << std::endl;
+
+        // thruster manager is able to trnasform control input
+        // u into the value that thruster needs to give!
+        // and it is indeed the right value!
+        control_input_std.force.x = control_input[0];
+        control_input_std.force.y = control_input[1];
+        control_input_std.force.z = control_input[2];
+        control_input_std.torque.x = control_input[3];
+        control_input_std.torque.y = control_input[4];
+        control_input_std.torque.z = control_input[5];
+        control_std_pub.publish(control_input_std);
+
+        double h;
+        for (int i = 0; i < N_OB; i++)
+        {
+            if (obstacles[i][0] == 0)
+            {
+                // it's cylinder
+                h = std::pow(obstacles_std[i][1] - std_eta.linear.x, 2) +
+                    std::pow(obstacles_std[i][2] - std_eta.linear.y, 2) -
+                    std::pow(obstacles_std[i][7], 2);
+                if (i == 0)
+                    cylinder_h.x = h;
+                else if (i == 1)
+                    cylinder_h.y = h;
+                else
+                    cylinder_h.z = h;
+            }
+            else
+            {
+                // it's sphere
+                h = std::pow(obstacles_std[i][1] - std_eta.linear.x, 2) +
+                    std::pow(obstacles_std[i][2] - std_eta.linear.y, 2) +
+                    std::pow(obstacles_std[i][3] - std_eta.linear.z, 2) -
+                    std::pow(obstacles_std[i][7], 2);
+                if (i == 0)
+                    sphere_h.x = h;
+                else if (i == 1)
+                    sphere_h.y = h;
+                else
+                    sphere_h.z = h;
+            }
+        }
+        cylinder_pub.publish(cylinder_h);
+        sphere_pub.publish(sphere_h);
+
+        std::ostringstream str;
+        str << "frequency: " << int(1 / cpu_time) << " Hz";
+        marker.text = str.str();
+        marker.pose.position.x = std_eta.linear.x;
+        marker.pose.position.y = std_eta.linear.y;
+        marker.pose.position.z = std_eta.linear.z + 0.8;
+
+        freq_marker_pub.publish(marker);
+
+        solve_time.data = cpu_time;
+        solve_time_pub.publish(solve_time);
+    }
+
+    void NewMpcCbfNode::run(void)
+    {
+        // std::pair<int,int> size_ = target_state_value.size();
+        // std::cout<< size_.first <<"," << size_.second <<std::endl;
+
+        // size_ = transpose(bluerov2_states).size();
+        // std::cout<<"state' "<< size_.first <<"," << size_.second <<std::endl;
+
+        // 1e7*casadi::DM::ones(horizon_ * N_OB)
+        // it's a single loop
+
+        std::vector<double> params = bluerov2_states;
+        params.insert(params.end(), target_state_value.begin(), target_state_value.end());
+
+        // std::cout << "params::::::::::::::::" << params <<std::endl;
+        // vertcat(transpose(casadi::DM(bluerov2_states)),
+        //                   transpose(casadi::DM(target_state_value)))
+
+        // {"lbx",  vertcat(casadi::DM(lbu), -1*casadi::DM::inf((horizon_+1)*12,1))  },
+        // {"ubx", vertcat(casadi::DM(ubu),-1*casadi::DM::inf((horizon_+1)*12,1))  },
+
+        casadi::DMDict args;
+        args = {
+            {"lbx", lbu},
+            {"ubx", ubu},
+            {"lbg", casadi::DM::zeros(horizon_ * N_OB, 1)},
+            {"ubg", casadi::DM::inf(horizon_ * N_OB, 1)},
+            {"p", params}};
+        // std::cout << "right***********************************" << std::endl;
+        // std::cout << "lbu " << lbu << std::endl;
+        std::stringstream buffer;
+        // save old cout buffer
+        std::streambuf* old = std::cout.rdbuf(buffer.rdbuf());
+
+        // store solve results
+        std::map<std::string, casadi::DM> result = mpc_cbf_solver(args);
+        auto stats = mpc_cbf_solver.stats();
+        std::string return_status = stats["return_status"];
+        if (return_status != "Solve_Succeeded")
+        {
+            std::cout << "Optimization failed. Status: " << return_status << std::endl;
+            ROS_ERROR("mpc casadi solve failed!!!!!!!!!");
+
+            std::cout << "input initial state:  " << bluerov2_states << std::endl;
+            std::cout << "u res:  " << result.at("x") << std::endl;
+            std::cout << "constraint res:  " << result.at("g") << std::endl;
+            exit(1);
+        }
+        // std::vector<double> tar = result["target_state"].get_elements();
+        // std::cout << tar << "  tar!!!!!!!!!!!!!" << std::endl;
+        // std::cout << result["target_state"] << "  tar!!!!!!!!!!!!!" << std::endl;
+
+        // std::vector<double> st0(result["state0"]);
+        // std::cout << st0 << "  tstate0!!!!!!!!!!!!" << std::endl;
+        // std::cout << result["state0"] << "  tstate0!!!!!!!!!!!!" << std::endl;
+        // std::vector<double> stt(result["state"]);
+        // std::cout << stt << "  state!!!!!!!!!!!!!!!" << std::endl;
+        // std::cout << result["state"] << "  state!!!!!!!!!!!!!!!" << std::endl;
+        // std::vector<double> tffr(result["tau"]);
+        // std::cout << tffr << "  tau!!!!!!!!!!!!!!!" << std::endl;
+        // std::cout << result["tau"] << "  tau!!!!!!!!!!!!!!!" << std::endl;
+
+        std::vector<double> res(result.at("x"));
+        // get sys input and solve time
+        std::copy(res.begin(), res.begin() + N_U, bluerov2_input.begin());
+        // 恢复 cout
+        std::cout.rdbuf(old);
+
+        // 从输出中解析时间
+        std::string line;
+        while (std::getline(buffer, line)) {
+            if (line.find("Total seconds in IPOPT") != std::string::npos) {
+                size_t pos = line.find("=");
+                if (pos != std::string::npos) {
+                    std::string time_str = line.substr(pos + 1);
+                    cpu_time = std::stod(time_str);
+                    break;
+                }
+            }
+        }
+
+        std::cout << cpu_time << "  time!!!!!!!!!!!!!!!" << std::endl;
+        std::cout << "solve once done **********************************************  " << std::endl;
+        // publish control input and other msgs
+        control_pub();
+        std::cout << "pub once done **********************************************  " << std::endl;
+    }
+
+}
+
+int main(int argc, char **argv)
+{
+    int control_rate = 10;
+    ros::init(argc, argv, "new_mpc_cbf_node");
+    ros::NodeHandle nh;
+    new_mpc_cbf::NewMpcCbfNode new_mpc_cbf_node(nh, 1. / control_rate);
+    ros::Rate rate(control_rate);
+    ROS_INFO_ONCE("**********************new_mpc_cbf_node_start************************");
+    while (ros::ok())
+    {
+        ros::spinOnce();
+        new_mpc_cbf_node.run();
+        rate.sleep();
+    }
+    return 0;
+}

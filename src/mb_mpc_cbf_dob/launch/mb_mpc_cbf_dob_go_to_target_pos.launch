@@ -1,0 +1,85 @@
+<launch>
+     <arg name="use_log" default="false"/>
+     <arg name="apply_wrench" default="true"/>
+     <arg name="dynamic_wrench" default="false"/>
+     <arg name="horizon" default="6"/>
+     <arg name="blocking_index" default="0,1,3"/>
+     <arg name="k_alpha_1" default="960"/>
+     <arg name="k_alpha_2" default="80"/>
+     <!-- these are DOB params -->
+     <arg name="omega_1" default="5"/>
+     <arg name="beta" default="200"/>
+     <arg name="v1" default="0.4"/>
+     <arg name="alpha" default="0.45"/>
+     <arg name="l_factor" default="0.8"/>
+
+     <arg name="force_x" default="-2"/>
+     <arg name="force_y" default="-2"/>
+     <arg name="force_z" default="2"/>
+     <arg name="torque_z" default="-1"/>
+
+     <arg name="amplitude_force_x" default="0"/>
+     <arg name="amplitude_force_y" default="0"/>
+     <arg name="amplitude_force_z" default="0"/>
+     <arg name="amplitude_torque_x" default="0"/>
+     <arg name="amplitude_torque_y" default="0"/>
+     <arg name="amplitude_torque_z" default="0"/>
+     <arg name="frequency" default="1.0"/>
+     <arg name="phase" default="0.0"/>
+
+    <group if="$(arg use_log)">
+     <node name="mb_mpc_cbf_dob_node" pkg="mb_mpc_cbf_dob" type="mb_mpc_cbf_dob_node" output="log" >   
+          <param name="horizon" value="$(arg horizon)"/>
+          <param name="blocking_index" value="$(arg blocking_index)"/>
+          <param name="k_alpha_1" value="$(arg k_alpha_1)"/>
+          <param name="k_alpha_2" value="$(arg k_alpha_2)"/>
+          <param name="omega_1" value="$(arg omega_1)"/>
+          <param name="beta" value="$(arg beta)"/>
+          <param name="v1" value="$(arg v1)"/>
+          <param name="alpha" value="$(arg alpha)"/>
+          <param name="l_factor" value="$(arg l_factor)"/>
+     </node>
+    </group>
+    
+    <group unless="$(arg use_log)">
+     <node name="mb_mpc_cbf_dob_node" pkg="mb_mpc_cbf_dob" type="mb_mpc_cbf_dob_node" output="screen" >
+          <param name="horizon" value="$(arg horizon)"/>
+          <param name="blocking_index" value="$(arg blocking_index)"/>
+          <param name="k_alpha_1" value="$(arg k_alpha_1)"/>
+          <param name="k_alpha_2" value="$(arg k_alpha_2)"/>
+          <param name="omega_1" value="$(arg omega_1)"/>
+          <param name="beta" value="$(arg beta)"/>
+          <param name="v1" value="$(arg v1)"/>
+          <param name="alpha" value="$(arg alpha)"/>
+          <param name="l_factor" value="$(arg l_factor)"/>
+     </node>
+    </group>
+
+    <group if="$(arg apply_wrench)">
+          <group if="$(arg dynamic_wrench)">
+               <include file="$(find bluerov2_gazebo)/launch/apply_dynamic_wrench.launch">
+                    <arg name="uuv_name" value="bluerov2"/>
+                    <arg name="amplitude_force_x" value="$(arg force_x)"/>
+                    <arg name="amplitude_force_y" value="$(arg force_y)"/>
+                    <arg name="amplitude_force_z" value="$(arg force_z)"/>
+                    <arg name="amplitude_torque_z" value="$(arg torque_z)"/>
+                    <arg name="frequency" value="$(arg frequency)"/>
+                    <arg name="phase" value="$(arg phase)"/>
+               </include>
+          </group>
+
+          <group unless="$(arg dynamic_wrench)">
+               <!-- good choice of applying static wrench -->
+               <!-- it's described in std frame, and d_hat gives the ned frame -->
+               <include file="$(find bluerov2_gazebo)/launch/apply_body_wrench.launch">
+                    <arg name="uuv_name" value="bluerov2"/>
+                    <arg name="starting_time" value="1"/>
+                    <arg name="duration" value="10000"/>
+                    <arg name="force_x" value="$(arg force_x)"/>
+                    <arg name="force_y" value="$(arg force_y)"/>
+                    <arg name="force_z" value="$(arg force_z)"/>
+                    <arg name="torque_z" value="$(arg torque_z)"/>
+               </include>
+          </group>
+     </group>    
+</launch>       

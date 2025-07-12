@@ -1,0 +1,199 @@
+<?xml version="1.0"?>
+<robot name="all_obstacles">
+  <link name="world" />
+
+   <link name="tower">
+    <!-- Inertial properties -->
+    <inertial>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <mass value="1000"/>
+      <inertia ixx="16083.333333333" ixy="0" ixz="0" iyy="16083.333333333" iyz="0" izz="8166.666666667"/>
+    </inertial>
+    <!-- Visual properties -->
+    <visual name="visual">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="1" length="14"/>
+      </geometry>
+      <material name="Gazebo/Grey">
+        <color rgba="0.7 0.7 0.7 1"/>
+      </material>
+    </visual>
+    <!-- Collision properties -->
+    <collision name="collision">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="1" length="14"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="tower_joint" type="fixed">
+      <origin xyz="24  13  -95" rpy="0 0 0"/>
+      <parent link="world"/>
+      <child link="tower"/>
+    </joint>
+
+  <link name="tower2">
+    <!-- Inertial properties -->
+    <inertial>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <mass value="1000"/>
+      <inertia ixx="16083.333333333" ixy="0" ixz="0" iyy="16083.333333333" iyz="0" izz="8166.666666667"/>
+    </inertial>
+    <!-- Visual properties -->
+    <visual name="visual">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="1" length="14"/>
+      </geometry>
+      <material name="Gazebo/Grey">
+        <color rgba="0.7 0.7 0.7 1"/>
+      </material>
+    </visual>
+    <!-- Collision properties -->
+    <collision name="collision">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="1" length="14"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="tower2_joint" type="fixed">
+    <origin xyz="19  13.6  -95" rpy="0 0 1.57"/>
+    <parent link="world"/>
+    <child link="tower2"/>
+  </joint>
+
+
+  <link name="tower3">
+     <!-- Inertial properties -->
+    <inertial>
+      <origin xyz="0 0 0.1" rpy="0 0 0"/>
+      <mass value="1000"/>
+      <inertia ixx="16083.333333333" ixy="0" ixz="0" iyy="16083.333333333" iyz="0" izz="8166.666666667"/>
+    </inertial>
+    <!-- Visual properties -->
+    <visual name="visual">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="1" length="14"/>
+      </geometry>
+      <material name="Gazebo/Grey">
+        <color rgba="0.7 0.7 0.7 1"/>
+      </material>
+    </visual>
+    <!-- Collision properties -->
+    <collision name="collision">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="1" length="14"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="tower3_joint" type="fixed">
+    <origin xyz="30.9  8  -95" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="tower3"/>
+  </joint>
+
+  <!-- since urdf doesn't support dae file, then we just use it's boundary -->
+  <link name="ship">
+    <!-- Inertial properties -->
+    <inertial>
+      <origin xyz="0 0 0.25" rpy="0 1.57 0"/>
+      <mass value="10"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+    <!-- Visual properties -->
+    <visual name="visual">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <sphere radius="2.6"/>
+        </geometry>
+        <material name="Gazebo/Blue">
+          <color rgba="0.7 0.7 0.7 1"/>
+        </material>
+    </visual>
+    <!-- Collision properties -->
+    <collision name="collision">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <sphere radius="2.6"/>
+        </geometry>
+    </collision>
+  </link>
+
+  <joint name="ship_joint" type="fixed">
+    <origin xyz="30.5  13  -95" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="ship"/>
+  </joint>
+
+
+  <!-- since urdf doesn't support dae file, then we just use it's boundary -->
+  <link name="rov_bop">
+    <!-- Inertial properties -->
+    <inertial>
+      <origin xyz="0 0 0.25" rpy="0 1.57 0"/>
+      <mass value="10"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+    <!-- Visual properties -->
+    <visual name="visual">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <sphere radius="1.2"/>
+        </geometry>
+        <material name="Gazebo/Grey">
+          <color rgba="0.7 0.7 0.7 1"/>
+        </material>
+    </visual>
+    <!-- Collision properties -->
+    <collision name="collision">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <sphere radius="1.2"/>
+        </geometry>
+    </collision>
+  </link>
+
+  <joint name="rov_bop_joint" type="fixed">
+    <origin xyz="33  11  -95" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="rov_bop"/>
+  </joint>
+
+
+    <!-- since urdf doesn't support dae file, then we just use it's boundary -->
+  <link name="rov_bop2">
+    <!-- Inertial properties -->
+    <inertial>
+      <origin xyz="0 0 0.25" rpy="0 1.57 0"/>
+      <mass value="10"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+    <!-- Visual properties -->
+    <visual name="visual">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <sphere radius="1.2"/>
+        </geometry>
+        <material name="Gazebo/Grey">
+          <color rgba="0.7 0.7 0.7 1"/>
+        </material>
+    </visual>
+    <!-- Collision properties -->
+    <collision name="collision">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <sphere radius="1.2"/>
+        </geometry>
+    </collision>
+  </link>
+  <joint name="rov_bop2_joint" type="fixed">
+    <origin xyz="25  8  -95" rpy="0 0 1"/>
+    <parent link="world"/>
+    <child link="rov_bop2"/>
+  </joint>
+
+</robot>
