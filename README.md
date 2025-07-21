@@ -184,5 +184,9 @@ export GAZEBO_PLUGIN_PATH= [your workspace path]/fish_1_plugin/build:$GAZEBO_PLU
 export GAZEBO_PLUGIN_PATH= [your workspace path]/fish_2_plugin/build:$GAZEBO_PLUGIN_PATH
 ```
 
+## 6. please cite us
 
+If you find this code useful in your research or work, please consider citing our corresponding paper. Your citation would be greatly appreciated as this project involved significant effort. We also welcome questions, suggestions, and contributions.
+
+> Tang, Yujie, et al. "[Flexible and safe navigation of autonomous underwater vehicles with input-dynamics move blocking](https://doi.org/10.1016/j.oceaneng.2025.122182)." Ocean Engineering 339 (2025): 122182.
 
